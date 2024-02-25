@@ -45,11 +45,15 @@ BOOL RdpSession::preConnect(freerdp *rdp)
     auto settings = ctx->settings;
     WINPR_ASSERT(settings);
 
-    settings->OsMajorType = OSMAJORTYPE_UNIX;
-    settings->OsMinorType = OSMINORTYPE_UNSPECIFIED;
+    if (!freerdp_settings_set_uint32(settings, FreeRDP_OsMajorType, OSMAJORTYPE_UNIX))
+        return FALSE;
+    if (!freerdp_settings_set_uint32(settings, FreeRDP_OsMajorType, OSMINORTYPE_UNSPECIFIED))
+        return FALSE;
 
-    PubSub_SubscribeChannelConnected(ctx->pubSub, channelConnected);
-    PubSub_SubscribeChannelDisconnected(ctx->pubSub, channelDisconnected);
+    if (PubSub_SubscribeChannelConnected(ctx->pubSub, channelConnected) < 0)
+        return FALSE;
+    if (PubSub_SubscribeChannelDisconnected(ctx->pubSub, channelDisconnected) < 0)
+        return FALSE;
 
     return TRUE;
 }
@@ -73,7 +77,9 @@ BOOL RdpSession::postConnect(freerdp *rdp)
     WINPR_ASSERT(settings);
 
     auto &buffer = session->m_videoBuffer;
-    buffer = QImage(settings->DesktopWidth, settings->DesktopHeight, QImage::Format_RGBA8888);
+    auto w = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
+    auto h = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+    buffer = QImage(w, h, QImage::Format_RGBA8888);
 
     if (!gdi_init_ex(rdp, PIXEL_FORMAT_RGBA32, buffer.bytesPerLine(), buffer.bits(), nullptr)) {
         qCWarning(KRDC) << "Could not initialize GDI subsystem";
@@ -328,83 +334,128 @@ int RdpSession::client_context_start(rdpContext *context)
     qCInfo(KRDC) << "Starting RDP session";
 
     // TODO: Migrate to freerdp_settings_set_* API
-    settings->ServerHostname = qstrdup(session->m_host.toUtf8().data());
-    settings->ServerPort = session->m_port;
+    if (!freerdp_settings_set_string(settings, FreeRDP_ServerHostname, session->m_host.toUtf8().data()))
+        return -1;
+    if (!freerdp_settings_set_uint32(settings, FreeRDP_ServerPort, session->m_port))
+        return -1;
 
-    settings->Username = qstrdup(session->m_user.toUtf8().data());
-    settings->Password = qstrdup(session->m_password.toUtf8().data());
+    if (!freerdp_settings_set_string(settings, FreeRDP_Username, session->m_user.toUtf8().data()))
+        return -1;
+    if (!freerdp_settings_set_string(settings, FreeRDP_Password, session->m_password.toUtf8().data()))
+        return -1;
 
     if (session->m_size.width() > 0 && session->m_size.height() > 0) {
-        settings->DesktopWidth = session->m_size.width();
-        settings->DesktopHeight = session->m_size.height();
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_DesktopWidth, session->m_size.width()))
+            return -1;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_DesktopHeight, session->m_size.height()))
+            return -1;
     }
 
     switch (session->m_preferences->acceleration()) {
     case RdpHostPreferences::Acceleration::ForceGraphicsPipeline:
-        settings->SupportGraphicsPipeline = true;
-        settings->GfxAVC444 = true;
-        settings->GfxAVC444v2 = true;
-        settings->GfxH264 = true;
-        settings->RemoteFxCodec = false;
-        settings->ColorDepth = 32;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444v2, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxH264, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, false))
+            return -1;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32))
+            return -1;
         break;
     case RdpHostPreferences::Acceleration::ForceRemoteFx:
-        settings->SupportGraphicsPipeline = false;
-        settings->GfxAVC444 = false;
-        settings->GfxAVC444v2 = false;
-        settings->GfxH264 = false;
-        settings->RemoteFxCodec = true;
-        settings->ColorDepth = 32;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444v2, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxH264, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, true))
+            return -1;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32))
+            return -1;
         break;
     case RdpHostPreferences::Acceleration::Disabled:
-        settings->SupportGraphicsPipeline = false;
-        settings->GfxAVC444 = false;
-        settings->GfxAVC444v2 = false;
-        settings->GfxH264 = false;
-        settings->RemoteFxCodec = false;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444v2, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxH264, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, false))
+            return -1;
         break;
     case RdpHostPreferences::Acceleration::Auto:
-        settings->SupportGraphicsPipeline = true;
-        settings->GfxAVC444 = true;
-        settings->GfxAVC444v2 = true;
-        settings->GfxH264 = true;
-        settings->RemoteFxCodec = true;
-        settings->ColorDepth = 32;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_SupportGraphicsPipeline, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxAVC444v2, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_GfxH264, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, true))
+            return -1;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32))
+            return -1;
         break;
     }
 
     switch (session->m_preferences->colorDepth()) {
     case RdpHostPreferences::ColorDepth::Auto:
     case RdpHostPreferences::ColorDepth::Depth32:
-        settings->ColorDepth = 32;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32))
+            return -1;
         break;
     case RdpHostPreferences::ColorDepth::Depth24:
-        settings->ColorDepth = 24;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 24))
+            return -1;
         break;
     case RdpHostPreferences::ColorDepth::Depth16:
-        settings->ColorDepth = 16;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 16))
+            return -1;
         break;
     case RdpHostPreferences::ColorDepth::Depth8:
-        settings->ColorDepth = 8;
+        if (!freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 8))
+            return -1;
+        break;
+    default:
+        return -1;
     }
 
-    settings->FastPathOutput = true;
-    settings->FastPathInput = true;
-    settings->FrameMarkerCommandEnabled = true;
+    if (!freerdp_settings_set_bool(settings, FreeRDP_FastPathOutput, true))
+        return -1;
+    if (!freerdp_settings_set_bool(settings, FreeRDP_FastPathInput, true))
+        return -1;
+    if (!freerdp_settings_set_bool(settings, FreeRDP_FrameMarkerCommandEnabled, true))
+        return -1;
 
-    settings->SupportDynamicChannels = true;
+    if (!freerdp_settings_set_bool(settings, FreeRDP_SupportDynamicChannels, true))
+        return -1;
 
     switch (session->m_preferences->sound()) {
     case RdpHostPreferences::Sound::Local:
-        settings->AudioPlayback = true;
-        settings->AudioCapture = true;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_AudioPlayback, true))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_AudioCapture, true))
+            return -1;
         break;
     case RdpHostPreferences::Sound::Remote:
-        settings->RemoteConsoleAudio = true;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_RemoteConsoleAudio, true))
+            return -1;
         break;
     case RdpHostPreferences::Sound::Disabled:
-        settings->AudioPlayback = false;
-        settings->AudioCapture = false;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_AudioPlayback, false))
+            return -1;
+        if (!freerdp_settings_set_bool(settings, FreeRDP_AudioCapture, false))
+            return -1;
         break;
     }
 
@@ -413,29 +464,33 @@ int RdpSession::client_context_start(rdpContext *context)
         freerdp_client_add_device_channel(settings, 1, params);
     }
 
-    settings->KeyboardLayout = session->m_preferences->rdpKeyboardLayout();
+    if (!freerdp_settings_set_uint32(settings, FreeRDP_KeyboardLayout, session->m_preferences->rdpKeyboardLayout()))
+        return -1;
 
+    UINT32 TlsSecLevel = UINT32_MAX;
     switch (session->m_preferences->tlsSecLevel()) {
     case RdpHostPreferences::TlsSecLevel::Bit80:
-        settings->TlsSecLevel = 1;
+        TlsSecLevel = 1;
         break;
     case RdpHostPreferences::TlsSecLevel::Bit112:
-        settings->TlsSecLevel = 2;
+        TlsSecLevel = 2;
         break;
     case RdpHostPreferences::TlsSecLevel::Bit128:
-        settings->TlsSecLevel = 3;
+        TlsSecLevel = 3;
         break;
     case RdpHostPreferences::TlsSecLevel::Bit192:
-        settings->TlsSecLevel = 4;
+        TlsSecLevel = 4;
         break;
     case RdpHostPreferences::TlsSecLevel::Bit256:
-        settings->TlsSecLevel = 5;
+        TlsSecLevel = 5;
         break;
     case RdpHostPreferences::TlsSecLevel::Any:
     default:
-        settings->TlsSecLevel = 0;
+        TlsSecLevel = 0;
         break;
     }
+    if (!freerdp_settings_set_uint32(settings, FreeRDP_TlsSecLevel, TlsSecLevel))
+        return -1;
 
     session->m_thread = std::thread(std::bind(&RdpSession::run, session));
     pthread_setname_np(session->m_thread.native_handle(), "rdp_session");
@@ -515,14 +570,16 @@ BOOL RdpSession::resizeDisplay(rdpContext *context)
     WINPR_ASSERT(settings);
 
     auto &buffer = session->m_videoBuffer;
-    buffer = QImage(settings->DesktopWidth, settings->DesktopHeight, QImage::Format_RGBA8888);
+    auto w = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
+    auto h = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+    buffer = QImage(w, h, QImage::Format_RGBA8888);
 
-    if (!gdi_resize_ex(gdi, settings->DesktopWidth, settings->DesktopHeight, buffer.bytesPerLine(), PIXEL_FORMAT_RGBA32, buffer.bits(), nullptr)) {
+    if (!gdi_resize_ex(gdi, w, h, buffer.bytesPerLine(), PIXEL_FORMAT_RGBA32, buffer.bits(), nullptr)) {
         qCWarning(KRDC) << "Failed resizing GDI subsystem";
         return false;
     }
 
-    session->m_size = QSize(settings->DesktopWidth, settings->DesktopHeight);
+    session->m_size = QSize(w, h);
     Q_EMIT session->sizeChanged();
 
     return TRUE;
